@@ -1,0 +1,110 @@
+# Assignment 1: Virtual Machines & Networking (Azure + Terraform)
+
+Deploy a **secure Linux web server** on Azure using **reusable Terraform modules**.  
+This project provides three independent modules:
+
+- `modules/vnet` — Virtual Network + Subnet
+- `modules/nsg` — Network Security Group (opens TCP 22, 80 by default)
+- `modules/vm` — Linux VM with provisioner to install and enable **NGINX**
+
+## What gets deployed
+- Resource Group
+- VNet (10.10.0.0/16) with a Subnet (10.10.1.0/24)
+- NSG with inbound rules for **SSH (22)** and **HTTP (80)**
+- Public IP, NIC (with NSG associated), and an **Ubuntu LTS** VM
+- provisioner installs and starts **NGINX**, serves the default welcome page
+
+---
+
+## Prerequisites
+- [Terraform >= 1.5](https://developer.hashicorp.com/terraform/downloads)
+- Azure CLI logged in and the right subscription selected:
+  ```bash
+  az login
+  az account set --subscription "<SUBSCRIPTION_ID>"
+  ```
+- An SSH public key or Password 
+
+---
+
+## Usage (Root module)
+```bash
+# Clone or extract these files, then from the root:
+terraform init
+terraform apply -auto-approve       -var="prefix=cg"       -var="ssh_public_key=$(cat ~/.ssh/id_rsa.pub)"
+
+# After apply, Terraform prints outputs:
+# - public_ip
+# - ssh_command
+# - test_url
+```
+
+Visit `http://<public_ip>` and you should see the NGINX welcome page.
+
+To destroy:
+```bash
+terraform destroy -auto-approve       -var="prefix=dev-gaurav"       -var="ssh_public_key=$(cat ~/.ssh/id_rsa.pub)/admin_password"
+```
+
+---
+
+## Module Documentation
+
+### 1) modules/vnet
+**Creates** a VNet and a single Subnet.
+
+**Inputs**
+- `name` (string): VNet name
+- `address_space` (list(string)): e.g. `["10.10.0.0/16"]`
+- `subnet_name` (string)
+- `subnet_prefixes` (list(string)): e.g. `["10.10.1.0/24"]`
+- `location` (string)
+- `resource_group_name` (string)
+- `tags` (map(string), optional)
+
+**Outputs**
+- `vnet_id`
+- `subnet_id`
+
+---
+
+### 2) modules/nsg
+**Creates** an NSG and inbound rules for a list of allowed TCP ports.
+
+**Inputs**
+- `name` (string)
+- `location` (string)
+- `resource_group_name` (string)
+- `allowed_tcp_ports` (list(number)): default `[22, 80]`
+- `tags` (map(string), optional)
+
+**Outputs**
+- `id` (NSG id)
+
+---
+
+### 3) modules/vm
+**Creates** a Linux VM with Public IP, NIC (NSG attached), and provisioner installing NGINX.
+
+**Inputs**
+- `name` (string)
+- `location` (string)
+- `resource_group_name` (string)
+- `subnet_id` (string)
+- `nsg_id` (string)
+- `admin_username` (string)
+- `ssh_public_key` (string)
+- `vm_size` (string, default `Standard_B1s`)
+- `tags` (map(string), optional)
+
+**Outputs**
+- `public_ip` (string)
+- `nic_id` (string)
+- `vm_id` (string)
+
+---
+
+## Notes
+- NSG is associated to the **NIC** (not the subnet) to scope rules to this VM only.
+- Swap to Apache: change cloud-init in `modules/vm/cloud-init.yaml` accordingly.
+- All resources are tagged with `project=assignment1` by default; adjust as needed.
